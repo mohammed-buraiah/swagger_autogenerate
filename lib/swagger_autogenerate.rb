@@ -47,7 +47,6 @@ module SwaggerAutogenerate
   end
 
   def write_swaggger_trace
-    debugger
     if paths[paths.keys.last][request.method.downcase].present?
       paths[paths.keys.last][request.method.downcase]['responses'] = swagger_response
     end
@@ -70,11 +69,20 @@ module SwaggerAutogenerate
   end
 
   def edit_file
-    yaml_file = YAML.load(File.read(swagger_location), aliases: true,
-                                                       permitted_classes: [Symbol, Date, ActiveSupport::HashWithIndifferentAccess])
-    yaml_file['paths'].merge!(paths)
-    yaml_file = convert_to_hash(yaml_file)
+    yaml_file = YAML.load(
+      File.read(swagger_location),
+      aliases: true,
+      permitted_classes: [Symbol, Date, ActiveSupport::HashWithIndifferentAccess]
+    )
 
+    last_example = file_last_example(yaml_file)
+    if last_example
+      yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
+    else
+      yaml_file['paths'].merge!(paths)
+    end
+
+    yaml_file = convert_to_hash(yaml_file)
     File.open(swagger_location, 'w') do |file|
       result = add_quotes_to_dates(YAML.dump(yaml_file))
       file.write(result)
@@ -295,11 +303,33 @@ module SwaggerAutogenerate
     }
   end
 
+  def json_example_plus_one(string)
+    if string =~ /-(\d+)$/
+      numeric_part = $1.to_i
+      modified_numeric_part = numeric_part + 1
+      string.sub(/-(\d+)$/, "-#{modified_numeric_part}")
+    else
+      string
+    end
+  end
+
   def payload_keys
     @payload_keys ||= []
   end
 
   def payload_hash
     @payload_hash ||= {}
+  end
+
+  def file_last_example(yaml_file)
+    old_paths = yaml_file['paths']
+    if old_paths.key?(paths.keys.last)
+      if old_paths[paths.keys.last].key?(request.method.downcase)
+        if old_paths[paths.keys.last][request.method.downcase]['responses'].key?(response.status.to_s)
+          examples = old_paths[paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
+          json_example_plus_one(examples.keys.last)
+        end
+      end
+    end
   end
 end
