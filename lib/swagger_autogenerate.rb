@@ -316,7 +316,7 @@ module SwaggerAutogenerate
   end
 
   def apply_yaml_file_changes(yaml_file)
-    check_path(yaml_file) || check_method(yaml_file) || check_status(yaml_file) || check_examples(yaml_file)
+    check_path(yaml_file) || check_method(yaml_file) || check_status(yaml_file)
   end
 
   # checks
@@ -337,25 +337,17 @@ module SwaggerAutogenerate
 
   def check_status(yaml_file)
     old_paths = yaml_file['paths']
-    debugger if response.status.to_s != '200'
     if old_paths[paths.keys.last][request.method.downcase]['responses'].present?
-      unless old_paths[paths.keys.last]['responses']&.key?(response.status.to_s)
-        yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'][response.status.to_s] = swagger_response[response.status.to_s]
+      if old_paths[paths.keys.last][request.method.downcase]['responses']&.key?(response.status.to_s)
+        examples = old_paths[paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
+        last_example = json_example_plus_one(examples.keys.last)
+        last_example = 'example-0' unless last_example
+        yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
+      else
+        yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'].merge!({ response.status.to_s => swagger_response })
       end
     else
       yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'] = { response.status.to_s => swagger_response }
-    end
-  end
-
-  def check_examples(yaml_file)
-    old_paths = yaml_file['paths']
-
-    examples = old_paths[paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
-    last_example = json_example_plus_one(examples.keys.last)
-    if last_example
-      yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
-    else
-      yaml_file['paths'].merge!(paths)
     end
   end
 end
