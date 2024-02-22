@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "swagger_autogenerate/version"
-
 module SwaggerAutogenerate
   extend ::ActiveSupport::Concern
 
@@ -26,6 +24,7 @@ module SwaggerAutogenerate
       path = path.gsub!(v, "{#{k}}")
     end
 
+    $current_path = path
     full_path = URI.parse(request.path).path
     method = request.method.to_s.downcase
     tag = ENV['tag'] || controller_name
@@ -47,8 +46,8 @@ module SwaggerAutogenerate
   end
 
   def write_swaggger_trace
-    if paths[paths.keys.last][request.method.downcase].present?
-      paths[paths.keys.last][request.method.downcase]['responses'] = swagger_response
+    if paths[current_path][request.method.downcase].present?
+      paths[current_path][request.method.downcase]['responses'] = swagger_response
     end
 
     if File.exist?(swagger_location)
@@ -258,6 +257,11 @@ module SwaggerAutogenerate
     $swagger_paths ||= {}
   end
 
+  def current_path
+    $current_path
+    # paths.keys.last
+  end
+
   def security
     [
       'Access-Token' => [],
@@ -323,31 +327,36 @@ module SwaggerAutogenerate
 
   def check_path(yaml_file)
     old_paths = yaml_file['paths']
-    unless old_paths.key?(paths.keys.last)
+    unless old_paths.key?(current_path)
       yaml_file['paths'].merge!(paths)
     end
   end
 
   def check_method(yaml_file)
     old_paths = yaml_file['paths']
-    unless old_paths[paths.keys.last].key?(request.method.downcase)
-      yaml_file['paths'][paths.keys.last][request.method.downcase] = { 'responses' => {response.status.to_s => swagger_response[response.status.to_s]} }
+    unless old_paths[current_path].key?(request.method.downcase)
+      yaml_file['paths'][current_path][request.method.downcase] = { 'responses' => swagger_response }
     end
   end
 
   def check_status(yaml_file)
     old_paths = yaml_file['paths']
-    if old_paths[paths.keys.last][request.method.downcase]['responses'].present?
-      if old_paths[paths.keys.last][request.method.downcase]['responses']&.key?(response.status.to_s)
-        examples = old_paths[paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
-        last_example = json_example_plus_one(examples.keys.last)
-        last_example = 'example-0' unless last_example
-        yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
+    if old_paths[current_path][request.method.downcase]['responses'].present?
+      if old_paths[current_path][request.method.downcase]['responses']&.key?(response.status.to_s)
+        new_example(yaml_file)
       else
-        yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'].merge!({ response.status.to_s => swagger_response })
+        yaml_file['paths'][current_path][request.method.downcase]['responses'].merge!(swagger_response)
       end
     else
-      yaml_file['paths'][paths.keys.last][request.method.downcase]['responses'] = { response.status.to_s => swagger_response }
+      yaml_file['paths'][current_path][request.method.downcase]['responses'] = swagger_response
     end
+  end
+
+  def new_example(yaml_file)
+    old_paths = yaml_file['paths']
+    examples = old_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
+    last_example = json_example_plus_one(examples.keys.last)
+    last_example = 'example-0' unless last_example
+    yaml_file['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
   end
 end
