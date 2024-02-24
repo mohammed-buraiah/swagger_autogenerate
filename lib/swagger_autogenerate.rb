@@ -5,6 +5,7 @@ module SwaggerAutogenerate
 
   REQUESTBODYJSON = false
   REQUESTBODYFORMDATA = true
+  KEY_ORDER = [:tags, :summary, :requestBody, :parameters, :responses, :security]
 
   included do
     if Rails.env.test? && ENV['SWAGGER'].present?
@@ -26,8 +27,7 @@ module SwaggerAutogenerate
 
     private
 
-    attr_reader :request, :response
-    attr_accessor :yaml_file
+    attr_reader :request, :response, :current_path, :yaml_file
 
     # main methods
 
@@ -38,15 +38,14 @@ module SwaggerAutogenerate
         path = path.gsub!(v, "{#{k}}")
       end
 
-      $current_path = path
+      @current_path = path
       full_path = URI.parse(request.path).path
       method = request.method.to_s.downcase
-      tag = ENV['tag'] || controller_name
       hash =
         {
           method => {
-            'tags' => [tag],
-            'summary' => full_path,
+            'tags' => tags,
+            'summary' => summary,
             'requestBody' => request_body,
             'parameters' => parameters,
             'responses' => {},
@@ -75,6 +74,7 @@ module SwaggerAutogenerate
       File.open(swagger_location, 'w') do |file|
         data = {}
         data['paths'] = paths
+        organize_result(data['paths'])
         data = data.to_hash
         result = add_quotes_to_dates(YAML.dump(data))
         file.write(result)
@@ -82,7 +82,7 @@ module SwaggerAutogenerate
     end
 
     def edit_file
-      yaml_file = YAML.load(
+      @yaml_file = YAML.load(
         File.read(swagger_location),
         aliases: true,
         permitted_classes: [Symbol, Date, ActiveSupport::HashWithIndifferentAccess]
@@ -91,7 +91,8 @@ module SwaggerAutogenerate
       return create_file if yaml_file.nil? || yaml_file['paths'].nil?
 
       apply_yaml_file_changes
-      yaml_file = convert_to_hash(yaml_file)
+      organize_result(yaml_file['paths'])
+      @yaml_file = convert_to_hash(yaml_file)
       File.open(swagger_location, 'w') do |file|
         result = add_quotes_to_dates(YAML.dump(yaml_file))
         file.write(result)
@@ -158,10 +159,43 @@ module SwaggerAutogenerate
       content_body(request.request_parameters) if request.request_parameters.present?
     end
 
-    def response_description
-      return 'Successful response' if (response.status == 200) || (response.status == 201)
+    def tags
+      [ENV['tag'] || controller_name]
+    end
 
-      I18n.t("errors.e_#{response.status}")
+    def summary
+      URI.parse(request.path).path
+    end
+
+    def response_status
+      {
+        100 => 'The initial part of the request has been received, and the client should proceed with sending the remainder of the request',
+        101 => 'The server agrees to switch protocols and is acknowledging the client\'s request to change the protocol being used',
+        200 => 'The request has succeeded',
+        201 => 'The request has been fulfilled, and a new resource has been created as a result. The newly created resource is returned in the response body',
+        202 => 'The request has been accepted for processing, but the processing has not been completed. The response may contain an estimated completion time or other status information',
+        204 => 'The server has successfully processed the request but does not need to return any content. It is often used for requests that don\'t require a response body, such as DELETE requests',
+        300 => 'The requested resource has multiple choices available, each with its own URI and representation. The client can select one of the available choices',
+        301 => 'The requested resource has been permanently moved to a new location, and any future references to this resource should use the new URI provided in the response',
+        302 => 'The requested resource has been temporarily moved to a different location. The client should use the URI specified in the response for future requests',
+        304 => 'The client\'s cached copy of a resource is still valid, and there is no need to transfer a new copy. The client can use its cached version',
+        400 => 'The server cannot understand the request due to a client error, such as malformed syntax or invalid parameters',
+        401 => 'The request requires user authentication. The client must provide valid credentials (e.g., username and password) to access the requested resource',
+        403 => 'The server understood the request, but the client does not have permission to access the requested resource',
+        404 => 'The requested resource could not be found on the server',
+        405 => 'The requested resource does not support the HTTP method used in the request (e.g., GET, POST, PUT, DELETE)',
+        409 => 'The request could not be completed due to a conflict with the current state of the target resource. The client may need to resolve the conflict before resubmitting the request',
+        422 => 'The server understands the content type of the request entity but was unable to process the contained instructions',
+        500 => 'The server encountered an unexpected condition that prevented it from fulfilling the request',
+        502 => 'The server acting as a gateway or proxy received an invalid response from an upstream server',
+        503 => 'The server is currently unable to handle the request due to temporary overload or maintenance. The server may provide a Retry-After header to indicate when the client can try the request again',
+        504 => 'The server acting as a gateway or proxy did not receive a timely response from an upstream server'
+      }
+    end
+
+
+    def response_description
+      response_status[response.status]
     end
 
     def swagger_response
@@ -169,11 +203,11 @@ module SwaggerAutogenerate
       begin
         swagger_response = JSON.parse(response.body)
       rescue JSON::ParserError
-        swagger_response = { 'file' => 'file' }
+        swagger_response = { 'file' => 'file/data' }
       end
 
       hash['description'] = response_description
-      hash['headers'] = {}
+      hash['headers'] = {} # response.headers
       hash['content'] = content_json_example(swagger_response)
 
       {
@@ -270,17 +304,11 @@ module SwaggerAutogenerate
     # Static
 
     def paths
-      $paths ||= {}
-    end
-
-    def current_path
-      $current_path
-      # paths.keys.last
+      @@paths ||= {}
     end
 
     def security
       [
-        'Access-Token' => [],
         'org_slug' => [],
         'locale' => []
       ]
@@ -291,7 +319,11 @@ module SwaggerAutogenerate
     end
 
     def swagger_location
-      "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}.yaml"
+      return @swagger_location if instance_variable_defined?(:@swagger_location)
+
+      directory_path = "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}"
+      FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
+      @swagger_location = "#{directory_path}/#{tags.first}.yaml"
     end
 
     def content_json(data)
@@ -345,13 +377,27 @@ module SwaggerAutogenerate
     def apply_yaml_file_changes
       check_path || check_method || check_status &&
       check_parameters || check_parameter &&
-      check_request_body
+      check_request_bodys || check_request_body
     end
 
     def old_paths
       yaml_file['paths']
     end
+
     # checks
+
+    def organize_result(current_paths)
+      new_hash = {
+        'tags' => tags,
+        'summary' => summary
+      }
+      new_hash['parameters'] = current_paths[current_path][request.method.downcase]['parameters'] if current_paths[current_path][request.method.downcase]['parameters']
+      new_hash['requestBody'] = current_paths[current_path][request.method.downcase]['requestBody'] if current_paths[current_path][request.method.downcase]['requestBody']
+      new_hash['responses'] = current_paths[current_path][request.method.downcase]['responses']
+      new_hash['security'] = security
+
+      current_paths[current_path][request.method.downcase] = new_hash
+    end
 
     def check_path
       unless old_paths.key?(current_path)
@@ -391,9 +437,19 @@ module SwaggerAutogenerate
       end
     end
 
-    def check_request_body
-      unless old_paths[current_path][request.method.downcase]['requestBody'].present?
+    def check_request_bodys
+      if paths[current_path][request.method.downcase]['requestBody'].present? && old_paths[current_path][request.method.downcase]['requestBody'].nil?
         yaml_file['paths'][current_path][request.method.downcase]['requestBody'] = paths[current_path][request.method.downcase]['requestBody']
+      end
+    end
+
+    def check_request_body
+      if paths[current_path][request.method.downcase]['requestBody'].present?
+        param_names = paths[current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].keys - yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].keys
+        param_names.each do |param_name|
+          param = paths[current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].select { |parameter| parameter == param_name }
+          yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].merge!(param)
+        end
       end
     end
   end
