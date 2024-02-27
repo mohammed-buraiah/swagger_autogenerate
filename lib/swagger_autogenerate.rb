@@ -321,9 +321,13 @@ module SwaggerAutogenerate
     def swagger_location
       return @swagger_location if instance_variable_defined?(:@swagger_location)
 
-      directory_path = "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}"
-      FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
-      @swagger_location = "#{directory_path}/#{tags.first}.yaml"
+      if ENV['SWAGGER'].include?('.yaml') || ENV['SWAGGER'].include?('.yml')
+        @swagger_location = "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}"
+      else
+        directory_path = "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}"
+        FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
+        @swagger_location = "#{directory_path}/#{tags.first}.yaml"
+      end
     end
 
     def content_json(data)
