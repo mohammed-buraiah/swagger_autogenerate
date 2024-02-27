@@ -65,6 +65,7 @@ module SwaggerAutogenerate
 
       if File.exist?(swagger_location)
         edit_file
+        @@paths = {}
       else
         create_file
       end
