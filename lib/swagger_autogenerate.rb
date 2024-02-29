@@ -18,6 +18,7 @@ module SwaggerAutogenerate
     def initialize(request, response)
       @request = request
       @response = response
+      @@paths = {}
     end
 
     def call
@@ -65,7 +66,6 @@ module SwaggerAutogenerate
 
       if File.exist?(swagger_location)
         edit_file
-        @@paths = {}
       else
         create_file
       end
@@ -378,10 +378,16 @@ module SwaggerAutogenerate
     end
 
     def new_example
-      examples = old_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
-      last_example = json_example_plus_one(examples.keys.last)
-      last_example = 'example-0' unless last_example
-      yaml_file['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
+      current_example = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
+      old_examples = old_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
+
+      unless old_examples.value?(current_example)
+        last_example = json_example_plus_one(old_examples.keys.last)
+        last_example = 'example-0' unless last_example
+        yaml_file['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = current_example
+      end
+
+      true
     end
 
     def apply_yaml_file_changes
