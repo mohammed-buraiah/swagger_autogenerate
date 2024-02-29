@@ -104,7 +104,7 @@ module SwaggerAutogenerate
 
     def add_quotes_to_dates(string)
       string = remove_quotes_in_dates(string)
-      string.gsub(/\b\d{4}-\d{2}-\d{2}\b/, "'\\0'")
+      string.gsub(/\b(\d{4}-\d{2}-\d{2})(?:(?:\s\d{2}:\d{2}:\d{2})|(?:\s\d{2}:\d{2}:\d{2}\s\w{3}))/, "'\\1'")
     end
 
     def remove_quotes_in_dates(string)
