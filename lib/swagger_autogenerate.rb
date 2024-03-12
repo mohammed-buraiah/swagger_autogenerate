@@ -391,9 +391,9 @@ module SwaggerAutogenerate
     end
 
     def apply_yaml_file_changes
-      check_path || check_method || check_status &&
-      check_parameters || check_parameter &&
-      check_request_bodys || check_request_body
+      (check_path || check_method || check_status) &&
+      (check_parameters || check_parameter) &&
+      (check_request_bodys || check_request_body)
     end
 
     def old_paths
