@@ -104,8 +104,17 @@ module SwaggerAutogenerate
 
     def add_quotes_to_dates(string)
       string = remove_quotes_in_dates(string)
+      add_quotes_to_dates_1(string)
+      add_quotes_to_dates_2(string)
+    end
+
+    def add_quotes_to_dates_2(string)
       string.gsub(/\b(\d{4}-\d{2}-\d{2})(?:(?:\s\d{2}:\d{2}:\d{2})|(?:\s\d{2}:\d{2}:\d{2}\s\w{3}))/, "'\\1'")
     end
+
+    def add_quotes_to_dates_1(string)
+      string.gsub(/\b\d{4}-\d{2}-\d{2}\b/, "'\0'")
+      end
 
     def remove_quotes_in_dates(string)
       string.gsub(/'(\d{4}-\d{2}-\d{2})'/, '\1')
