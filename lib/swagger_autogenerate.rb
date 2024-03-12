@@ -6,6 +6,7 @@ module SwaggerAutogenerate
   REQUESTBODYJSON = false
   REQUESTBODYFORMDATA = true
   KEY_ORDER = [:tags, :summary, :requestBody, :parameters, :responses, :security]
+  WITH_CONFIG = false
 
   included do
     if Rails.env.test? && ENV['SWAGGER'].present?
@@ -73,7 +74,7 @@ module SwaggerAutogenerate
 
     def create_file
       File.open(swagger_location, 'w') do |file|
-        data = {}
+        data = WITH_CONFIG ? swagger_config : {}
         data['paths'] = paths
         organize_result(data['paths'])
         data = data.to_hash
@@ -90,6 +91,8 @@ module SwaggerAutogenerate
       )
 
       return create_file if yaml_file.nil? || yaml_file['paths'].nil?
+
+      yaml_file.merge!(swagger_config) if WITH_CONFIG
 
       apply_yaml_file_changes
       organize_result(yaml_file['paths'])
@@ -198,7 +201,6 @@ module SwaggerAutogenerate
         504 => 'The server acting as a gateway or proxy did not receive a timely response from an upstream server'
       }
     end
-
 
     def response_description
       response_status[response.status]
@@ -467,6 +469,27 @@ module SwaggerAutogenerate
           yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].merge!(param)
         end
       end
+    end
+
+    def swagger_config
+      {
+        'openapi' => '3.0.0',
+        'info' => {
+          'title' => 'title',
+          'description' => 'description',
+          'version' => '1.0.0'
+        },
+        'servers' => [],
+        'components' => {
+          'securitySchemes' => {
+            'locale' => {
+              'type' => 'apiKey',
+              'in' => 'query',
+              'name' => 'locale'
+            }
+          }
+        }
+      }
     end
   end
 end
