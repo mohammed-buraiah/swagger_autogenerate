@@ -1,11 +1,20 @@
 # frozen_string_literal: true
 
 module SwaggerAutogenerate
+  extend ::ActiveSupport::Concern
+
+  REQUESTBODYJSON = false
+  REQUESTBODYFORMDATA = true
+  KEY_ORDER = [:tags, :summary, :requestBody, :parameters, :responses, :security]
+  WITH_CONFIG = false
+
+  included do
+    if Rails.env.test? && ENV['SWAGGER'].present?
+      after_action  { SwaggerTrace.new(request, response).call }
+    end
+  end
+
   class SwaggerTrace
-    REQUESTBODYJSON = false
-    REQUESTBODYFORMDATA = true
-    KEY_ORDER = [:tags, :summary, :requestBody, :parameters, :responses, :security]
-    WITH_CONFIG = false
 
     def initialize(request, response)
       @request = request
