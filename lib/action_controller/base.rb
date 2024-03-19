@@ -1,5 +1,7 @@
 class ActionController::Base
-  if Rails.env.test? && ENV['SWAGGER'].present?
-    after_action  { SwaggerAutogenerate::SwaggerTrace.new(request, response).call }
+  after_action :swagger_autogenerate if Rails.env.test? && ENV['SWAGGER'].present?
+
+  def swagger_autogenerate
+    SwaggerAutogenerate::SwaggerTrace.new(request, response).call
   end
 end
