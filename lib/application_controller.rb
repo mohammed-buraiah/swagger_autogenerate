@@ -1,4 +1,4 @@
-class ActionController::Base
+class ApplicationController
   after_action :swagger_autogenerate if Rails.env.test? && ENV['SWAGGER'].present?
 
   def swagger_autogenerate
