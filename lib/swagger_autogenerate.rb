@@ -6,12 +6,11 @@ module SwaggerAutogenerate
 
   included do
     if Rails.env.test? && ENV['SWAGGER'].present?
-      after_action  { SwaggerTrace.new(request, response).call }
+      after_action { SwaggerTrace.new(request, response).call }
     end
   end
 
   class SwaggerTrace
-
     def initialize(request, response)
       @request = request
       @response = response
@@ -37,7 +36,6 @@ module SwaggerAutogenerate
       end
 
       @current_path = path
-      full_path = URI.parse(request.path).path
       method = request.method.to_s.downcase
       hash =
         {
@@ -326,9 +324,9 @@ module SwaggerAutogenerate
       return @swagger_location if instance_variable_defined?(:@swagger_location)
 
       if ENV['SWAGGER'].include?('.yaml') || ENV['SWAGGER'].include?('.yml')
-        @swagger_location = "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}"
+        @swagger_location = Rails.root.join(ENV.fetch('SWAGGER', nil).to_s).to_s
       else
-        directory_path = "#{Rails.root}/#{ENV.fetch('SWAGGER', nil)}"
+        directory_path = Rails.root.join(ENV.fetch('SWAGGER', nil).to_s).to_s
         FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
         @swagger_location = "#{directory_path}/#{tags.first}.yaml"
       end
@@ -358,8 +356,8 @@ module SwaggerAutogenerate
     end
 
     def json_example_plus_one(string)
-      if string =~ /-(\d+)$/
-        numeric_part = $1.to_i
+      if /-(\d+)$/.match?(string)
+        numeric_part = ::Regexp.last_match(1).to_i
         modified_numeric_part = numeric_part + 1
         string.sub(/-(\d+)$/, "-#{modified_numeric_part}")
       else
@@ -381,7 +379,7 @@ module SwaggerAutogenerate
 
       unless old_examples.value?(current_example)
         last_example = json_example_plus_one(old_examples.keys.last)
-        last_example = 'example-0' unless last_example
+        last_example ||= 'example-0'
         yaml_file['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = current_example
       end
 
@@ -390,8 +388,8 @@ module SwaggerAutogenerate
 
     def apply_yaml_file_changes
       (check_path || check_method || check_status) &&
-      (check_parameters || check_parameter) &&
-      (check_request_bodys || check_request_body)
+        (check_parameters || check_parameter) &&
+        (check_request_bodys || check_request_body)
     end
 
     def old_paths
@@ -438,7 +436,7 @@ module SwaggerAutogenerate
     end
 
     def check_parameters
-      unless old_paths[current_path][request.method.downcase]['parameters'].present?
+      if old_paths[current_path][request.method.downcase]['parameters'].blank?
         yaml_file['paths'][current_path][request.method.downcase]['parameters'] = paths[current_path][request.method.downcase]['parameters']
       end
     end
@@ -446,7 +444,7 @@ module SwaggerAutogenerate
     def check_parameter
       param_names = paths[current_path][request.method.downcase]['parameters'].pluck('name') - yaml_file['paths'][current_path][request.method.downcase]['parameters'].pluck('name')
       param_names.each do |param_name|
-        param = paths[current_path][request.method.downcase]['parameters'].find{ |parameter| parameter['name'] == param_name }
+        param = paths[current_path][request.method.downcase]['parameters'].find { |parameter| parameter['name'] == param_name }
         yaml_file['paths'][current_path][request.method.downcase]['parameters'].push(param)
       end
     end
