@@ -2,10 +2,6 @@
 
 module SwaggerAutogenerate
   extend ::ActiveSupport::Concern
-
-  REQUESTBODYJSON = false
-  REQUESTBODYFORMDATA = true
-  KEY_ORDER = [:tags, :summary, :requestBody, :parameters, :responses, :security]
   WITH_CONFIG = false
 
   included do
@@ -257,8 +253,8 @@ module SwaggerAutogenerate
 
     def content_body(data)
       hash = {}
-      hash.merge!(content_json(data)) if REQUESTBODYJSON
-      hash.merge!(content_form_data(data)) if REQUESTBODYFORMDATA
+      # hash.merge!(content_json(data))
+      hash.merge!(content_form_data(data))
 
       { 'content' => hash }
     end
